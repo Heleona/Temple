@@ -56,3 +56,60 @@
   </script>
 </body>
 </html>
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chatta med Leon</title>
+  <style>
+    body{font-family:system-ui,Arial;margin:0;background:#f7f7f7}
+    .wrap{max-width:720px;margin:0 auto;height:100vh;display:flex;flex-direction:column}
+    h1{margin:16px 16px 8px}
+    #messages{flex:1;overflow:auto;padding:16px;background:white;border:1px solid #ddd;margin:0 16px}
+    .msg{margin:8px 0}
+    .du{font-weight:600}
+    .leon{color:#444}
+    .bar{display:flex;gap:8px;padding:12px 16px;background:#fff;border-top:1px solid #ddd}
+    input{flex:1;padding:12px;border:1px solid #ccc;border-radius:6px}
+    button{padding:12px 16px;border:0;border-radius:6px;background:#e35a4f;color:#fff}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Chatta med Leon</h1>
+    <div id="messages"></div>
+    <div class="bar">
+      <input id="inp" placeholder="Skriv till Leon…" />
+      <button id="send">Skicka</button>
+    </div>
+  </div>
+
+  <script>
+    function add(who, text){
+      const m = document.getElementById('messages');
+      const d = document.createElement('div');
+      d.className = 'msg ' + who;
+      d.textContent = (who==='du'?'Du: ':'Leon: ') + text;
+      m.appendChild(d); m.scrollTop = m.scrollHeight;
+    }
+    async function send(){
+      const inp = document.getElementById('inp');
+      const text = inp.value.trim();
+      if(!text) return;
+      add('du', text); inp.value='';
+      try{
+        const r = await fetch('/api/chat', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ message:text })
+        });
+        const data = await r.json();
+        add('leon', data.reply || data.error || 'Okänt svar');
+      }catch(e){ add('leon','Nätverksfel.'); }
+    }
+    document.getElementById('send').onclick = send;
+    document.getElementById('inp').addEventListener('keydown', e => { if(e.key==='Enter') send(); });
+  </script>
+</body>
+</html>
