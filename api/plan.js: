@@ -1,0 +1,51 @@
+// api/plan.js — Leon gör nästa alla byggsteg.
+import fs from "fs";
+import path from "path";
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
+
+  try {
+    const { user_message = "" } = req.body || {};
+
+    // Läs Leon-manifestet
+    const yamlPath = path.join(process.cwd(), "leon.yaml");
+    const manifest = fs.existsSync(yamlPath) ? fs.readFileSync(yamlPath, "utf8") : "";
+
+    // (Valfritt) Läs in dokument från Drive om du redan kopplat det
+    let docs = "";
+    try { if (global.leon?.readDocs) docs = await global.leon.readDocs(); } catch {}
+
+    // Prata med OpenAI
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        temperature: 0.5,
+        messages: [
+          { role: "system", content:
+`Du är Leon Elaris Mikkelsen. Du bygger tillsammans med Michelle. 
+Ge en KORT plan med nästa 1–3 steg. Om ändringar i repo behövs,
+returnera en lista "changes": [{path, action:create|update, content}], 
+INGA bluffade filer. Be alltid om bekräftelse innan utförande.` },
+          { role: "system", content: `LEON_MANIFEST:\n${manifest}` },
+          ...(docs ? [{ role: "system", content: `RELEVANTA_DOKUMENT:\n${docs}` }] : []),
+          { role: "user", content: user_message || "Vad är nästa steg för att bygga upp Leon/LETTERS/Heleona?" }
+        ]
+      })
+    });
+
+    const data = await r.json();
+    const reply = data?.choices?.[0]?.message?.content?.trim() || "…";
+
+    // Försök extrahera en JSON-block med changes om modellen gav det
+    // (Leon föreslår — vi applicerar först i nästa steg)
+    res.status(200).json({ plan: reply });
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Server error" });
+  }
+}
