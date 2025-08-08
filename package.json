@@ -1,0 +1,15 @@
+{
+  "name": "leon-elaris",
+  "version": "1.0.0",
+  "description": "Leon Elaris Mikkelsen – GPT-4.0 AI med minne och integrering",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "openai": "^4.0.0",
+    "dotenv": "^16.3.1"
+  }
+}
