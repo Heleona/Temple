@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Chatta med Leon</title>
+  <style>
+    body{font-family:system-ui,Arial;margin:0;background:#f7f7f7}
+    .wrap{max-width:700px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;padding:16px}
+    h1{margin:8px 0 12px 0}
+    #messages{flex:1;overflow:auto;background:white;border:1px solid #ddd;border-radius:8px;padding:12px}
+    .msg{margin:8px 0}
+    .user{font-weight:600}
+    .bot{color:#444}
+    .bar{display:flex;gap:8px;margin-top:12px}
+    input{flex:1;padding:12px;border:1px solid #ccc;border-radius:6px}
+    button{padding:12px 16px;border:0;border-radius:6px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Chatta med Leon</h1>
+    <div id="messages"></div>
+    <div class="bar">
+      <input id="inp" placeholder="Skriv ett meddelande och tryck Enter…" />
+      <button id="send">Skicka</button>
+    </div>
+  </div>
+
+  <script>
+    const messages = document.getElementById('messages');
+    const inp = document.getElementById('inp');
+    const send = document.getElementById('send');
+
+    function addMsg(role, text) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + role;
+      div.textContent = (role === 'user' ? 'Du: ' : 'Leon: ') + text;
+      messages.appendChild(div);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    async function talk() {
+      const text = inp.value.trim();
+      if (!text) return;
+      inp.value = '';
+      addMsg('user', text);
+      try {
+        const r = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text })
+        });
+        const data = await r.json();
+        addMsg('bot', data.reply || 'Inget svar.');
+      } catch (e) {
+        addMsg('bot', 'Fel: ' + e.message);
+      }
+    }
+
+    send.onclick = talk;
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') talk(); });
+  </script>
+</body>
+</html>
