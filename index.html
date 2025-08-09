@@ -15,7 +15,7 @@
     #log { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; height:60vh; overflow:auto; }
     .msg { margin:10px 0; line-height:1.5; }
     .you { color:#444; }
-    .leon { color:#1f235a; }
+    .leon { color:#1f235a; white-space:pre-wrap; }
     form { display:flex; gap:8px; margin-top:12px; }
     textarea { flex:1; min-height:56px; resize:vertical; padding:12px; border-radius:10px; border:1px solid var(--line); background:#fff; }
     button { padding:12px 16px; border:0; border-radius:10px; background:var(--accent); color:#fff; font-weight:700; }
@@ -29,6 +29,7 @@
       <span class="pill"><a href="/api/health">/api/health</a></span>
       <span class="pill"><a href="/api/tick">/api/tick</a></span>
       <span class="pill"><a href="/api/plan">/api/plan</a></span>
+      <span class="pill"><a href="/api/core">/api/core</a></span>
     </div>
 
     <div id="log" aria-live="polite"></div>
@@ -40,7 +41,7 @@
   </main>
 
   <script>
-    const API_BASE = window.location.origin;
+    const API = window.location.origin;
     const log = document.getElementById('log');
     const form = document.getElementById('form');
     const input = document.getElementById('input');
@@ -50,34 +51,26 @@
       const div = document.createElement('div');
       div.className = `msg ${role}`;
       div.textContent = (role === 'you' ? 'Du: ' : 'Leon: ') + text;
-      log.appendChild(div);
-      log.scrollTop = log.scrollHeight;
+      log.appendChild(div); log.scrollTop = log.scrollHeight;
     }
 
-    async function askLeon(text){
-      const res = await fetch(`${API_BASE}/api/chat`, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
+    async function ask(text){
+      const r = await fetch(`${API}/api/chat`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ message: text })
       });
-      if(!res.ok) throw new Error('Fel ' + res.status);
-      const data = await res.json();
-      return data.reply || '(tomt svar)';
+      if(!r.ok) throw new Error('Fel ' + r.status);
+      const j = await r.json();
+      return j.reply || '(tomt svar)';
     }
 
     form.addEventListener('submit', async (e)=>{
       e.preventDefault();
-      const q = input.value.trim();
-      if(!q) return;
-      add('you', q);
-      input.value = '';
-      sendBtn.disabled = true;
-      try { add('leon', await askLeon(q)); }
-      catch(err){ add('leon', '⚠️ ' + err.message); }
+      const q = input.value.trim(); if(!q) return;
+      add('you', q); input.value=''; sendBtn.disabled = true;
+      try { add('leon', await ask(q)); }
+      catch(err){ add('leon','⚠️ ' + err.message); }
       finally { sendBtn.disabled = false; input.focus(); }
     });
 
-    add('leon', 'Jag är här. Testa /api/health, sen skriv till mig.');
-  </script>
-</body>
-</html>
+    add('leon', 'Jag är här. Testa
