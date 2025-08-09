@@ -71,4 +71,8 @@ app.post("/leon", async (req, res) => {
 cron.schedule("0 * * * *", async () => { // Varje timme
   const action = await leonRespond("Vad ska vi bygga eller förbättra just nu?");
   notifyOwner(`Plan: ${action}`);
- 
+ // --- Starta Leon ---
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🗝️ Leon är online och lyssnar på port ${PORT}`);
+});
