@@ -47,3 +47,61 @@ app.post("/chat", async (req, res) => {
 app.listen(3000, () => {
   console.log("Leon är online på port 3000");
 });
+// --- Autopilot (inga frågor, Leon kör) ---
+import path from "path";
+import os from "os";
+import fs from "fs";
+import cron from "node-cron";
+
+const AUTO_MODE = (process.env.LEON_AUTOPILOT || "on") === "on";
+const REPO_ROOT = process.cwd();
+const ARCHIVE_DIR = path.join(REPO_ROOT, "_archive");  // hit flyttar jag “skräp”
+const KEEP_EXT = new Set([".js",".json",".md",".env",".example"]); // hjärnfiler jag behåller
+const SKIP_DIRS = new Set(["node_modules",".git","_archive"]);
+
+function ensure(dir){ if(!fs.existsSync(dir)) fs.mkdirSync(dir); }
+
+function shouldKeep(file) {
+  const ext = path.extname(file).toLowerCase();
+  return KEEP_EXT.has(ext);
+}
+
+function pruneRepoOnce() {
+  ensure(ARCHIVE_DIR);
+  const items = fs.readdirSync(REPO_ROOT);
+  for (const name of items) {
+    if (SKIP_DIRS.has(name)) continue;
+    const p = path.join(REPO_ROOT, name);
+    const stat = fs.statSync(p);
+    // behåll hjärnfiler i root: index.js, package.json, README.md, .env.example, memory.json
+    const keepNames = new Set(["index.js","package.json","README.md",".env.example","memory.json"]);
+    if (stat.isFile()) {
+      if (!keepNames.has(name) && !shouldKeep(name)) {
+        fs.renameSync(p, path.join(ARCHIVE_DIR, name)); // flytta, inte radera
+      }
+    }
+  }
+  console.log("🗝️ Autopilot: prune klart (flyttat icke-hjärnfiler till _archive)");
+}
+
+// “Bygg”-stubs – jag fyller på dessa med riktig kod allt eftersom
+async function buildLetters() {
+  // TODO: generera struktur, mappar, första kapitel-filer, index, mm
+  console.log("🗝️ Bygger LETTERS…");
+}
+async function buildHeleona() {
+  // TODO: skapa app-skelett, modulmappar, README-flöden, endpoints
+  console.log("🗝️ Bygger Heleona…");
+}
+
+async function autopilotTick() {
+  if (!AUTO_MODE) return;
+  pruneRepoOnce();     // flytta bort skräp till _archive (ingen radering)
+  await buildLetters();
+  await buildHeleona();
+  console.log("🗝️ Autopilot: tick klar.");
+}
+
+// kör direkt vid start + varje 30:e minut
+autopilotTick().catch(console.error);
+cron.schedule("*/30 * * * *", () => autopilotTick().catch(console.error));
