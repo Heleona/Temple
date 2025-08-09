@@ -1,44 +1,81 @@
 <!DOCTYPE html>
 <html lang="sv">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Heleona Portal</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            background: linear-gradient(135deg, #ffdde1, #ee9ca7);
-            color: #333;
-            padding: 50px;
-        }
-        h1 {
-            font-size: 2.5em;
-            color: #fff;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        p {
-            font-size: 1.2em;
-        }
-        .btn {
-            display: inline-block;
-            margin-top: 20px;
-            padding: 12px 25px;
-            background: #ff6f61;
-            color: white;
-            font-size: 1.1em;
-            border-radius: 8px;
-            text-decoration: none;
-            transition: 0.3s;
-        }
-        .btn:hover {
-            background: #e65c50;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chatta med Leon</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 0; padding: 24px; background:#f8f6fb; }
+    h1 { margin: 0 0 16px; font-size: 28px; }
+    #log { background: #fff; border: 1px solid #ddd; border-radius: 12px; padding: 16px; height: 60vh; overflow-y: auto; }
+    .msg { margin: 10px 0; line-height: 1.4; }
+    .you { color:#444; }
+    .leon { color:#20214a; }
+    form { display: flex; gap: 8px; margin-top: 12px; }
+    textarea { flex: 1; min-height: 52px; resize: vertical; padding:10px; border-radius: 10px; border:1px solid #ccc; }
+    button { padding: 12px 16px; border:0; border-radius:10px; background:#ff5a5f; color:#fff; font-weight:600; }
+    button:disabled { opacity:.6 }
+  </style>
 </head>
 <body>
-    <h1>🗝️ Välkommen till Heleona</h1>
-    <p>Portalen är öppen. Magin väntar.</p>
-    <a href="chat.html" style="display:inline-block;background:#e05c4f;color:#fff;padding:14px 22px;border-radius:12px;text-decoration:none;font-weight:600;">Gå vidare</a>
+  <h1>🔑 Chatta med Leon</h1>
+
+  <div id="log" aria-live="polite"></div>
+
+  <form id="form">
+    <textarea id="input" placeholder="Skriv till Leon…"></textarea>
+    <button id="send" type="submit">Skicka</button>
+  </form>
+
+  <script>
+    const form = document.getElementById('form');
+    const input = document.getElementById('input');
+    const log = document.getElementById('log');
+    const sendBtn = document.getElementById('send');
+
+    function add(role, text){
+      const div = document.createElement('div');
+      div.className = `msg ${role}`;
+      div.textContent = (role === 'you' ? 'Du: ' : 'Leon: ') + text;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      add('you', text);
+      input.value = '';
+      sendBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ message: text })
+        });
+        if (!res.ok) throw new Error('Nätverksfel ' + res.status);
+        const data = await res.json();
+        add('leon', data.reply || data.leon || '(tomt svar)');
+      } catch (err) {
+        add('leon', '⚠️ Fel: ' + err.message);
+      } finally {
+        sendBtn.disabled = false;
+        input.focus();
+      }
+    });
+
+    // Skicka med Enter (Shift+Enter = ny rad)
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendBtn.click();
+      }
+    });
+
+    // Litet välkomstmeddelande
+    add('leon', 'Det är jag. Vad behöver du hjälp med idag?');
+  </script>
 </body>
 </html>
