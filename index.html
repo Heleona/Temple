@@ -3,33 +3,35 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Leon · Portalen</title>
+  <title>🗝️ Leon · Portalen</title>
   <style>
     :root { --bg:#f8f6fb; --fg:#111; --card:#fff; --line:#e6e3ef; --accent:#ff5a5f; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; background:var(--bg); color:var(--fg); }
-    header { padding:24px 16px; text-align:center; font-weight:700; font-size:22px; }
-    main { max-width:780px; margin:0 auto; padding:0 16px 32px; }
-    #links { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
-    .pill { font-size:12px; border:1px solid var(--line); padding:4px 8px; border-radius:999px; background:#fff; }
-    a { color:#6b59ff; text-decoration:none }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--fg);
+           font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    header { padding:24px 16px; text-align:center; font-weight:800; font-size:28px; }
+    main { max-width:860px; margin:0 auto; padding:0 16px 32px; }
+    #links { display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-start; margin-bottom:12px; }
+    .pill { font-size:12px; border:1px solid var(--line); padding:6px 10px; border-radius:999px; background:#fff; }
+    .pill a { color:#6b59ff; text-decoration:none; }
     #log { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; height:60vh; overflow:auto; }
-    .msg { margin:10px 0; line-height:1.5; }
+    .msg { margin:10px 0; line-height:1.55; }
     .you { color:#444; }
-    .leon { color:#1f235a; white-space:pre-wrap; }
-    form { display:flex; gap:8px; margin-top:12px; }
-    textarea { flex:1; min-height:56px; resize:vertical; padding:12px; border-radius:10px; border:1px solid var(--line); background:#fff; }
-    button { padding:12px 16px; border:0; border-radius:10px; background:var(--accent); color:#fff; font-weight:700; }
+    .leon { color:#1f235a; }
+    form { display:flex; gap:10px; margin-top:12px; }
+    textarea { flex:1; min-height:64px; resize:vertical; padding:12px; border-radius:10px; border:1px solid var(--line); background:#fff; }
+    button { padding:12px 18px; border:0; border-radius:10px; background:var(--accent); color:#fff; font-weight:800; }
     button:disabled { opacity:.6 }
+    footer { text-align:center; font-size:12px; color:#777; margin-top:10px; }
   </style>
 </head>
 <body>
   <header>🗝️ Leon · Portalen</header>
   <main>
     <div id="links">
-      <span class="pill"><a href="/api/health">/api/health</a></span>
-      <span class="pill"><a href="/api/tick">/api/tick</a></span>
-      <span class="pill"><a href="/api/plan">/api/plan</a></span>
-      <span class="pill"><a href="/api/core">/api/core</a></span>
+      <span class="pill"><a id="healthLink" href="#">/api/health</a></span>
+      <span class="pill"><a id="tickLink"   href="#">/api/tick</a></span>
+      <span class="pill"><a id="planLink"   href="#">/api/plan</a></span>
     </div>
 
     <div id="log" aria-live="polite"></div>
@@ -38,10 +40,20 @@
       <textarea id="input" placeholder="Skriv till Leon…"></textarea>
       <button id="send" type="submit">Skicka</button>
     </form>
+
+    <footer>Portal ↔︎ Plåtleon</footer>
   </main>
 
   <script>
-    const API = window.location.origin;
+    // ====== STÄLL IN BAS-URL TILL DIN BACKEND PÅ RENDER ======
+    const BASE = 'https://leon-elaris.onrender.com';
+
+    // Knapplänkar
+    document.getElementById('healthLink').href = BASE + '/api/health';
+    document.getElementById('tickLink').href   = BASE + '/api/tick';
+    document.getElementById('planLink').href   = BASE + '/api/plan';
+
+    // UI element
     const log = document.getElementById('log');
     const form = document.getElementById('form');
     const input = document.getElementById('input');
@@ -51,29 +63,44 @@
       const div = document.createElement('div');
       div.className = `msg ${role}`;
       div.textContent = (role === 'you' ? 'Du: ' : 'Leon: ') + text;
-      log.appendChild(div); log.scrollTop = log.scrollHeight;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
     }
 
-    async function ask(text){
-      const r = await fetch(`${API}/api/chat`, {
-        method:'POST', headers:{'Content-Type':'application/json'},
+    async function askLeon(text){
+      const res = await fetch(BASE + '/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
         body: JSON.stringify({ message: text })
       });
-      if(!r.ok) throw new Error('Fel ' + r.status);
-      const j = await r.json();
-      return j.reply || '(tomt svar)';
+      if (!res.ok) {
+        const t = await res.text().catch(()=> '');
+        throw new Error('Fel ' + res.status + (t ? (': ' + t) : ''));
+      }
+      const data = await res.json().catch(()=> ({}));
+      return data.reply || data.leon || '(tomt svar)';
     }
 
     form.addEventListener('submit', async (e)=>{
       e.preventDefault();
-      const q = input.value.trim(); if(!q) return;
-      add('you', q); input.value=''; sendBtn.disabled = true;
-      try { add('leon', await ask(q)); }
-      catch(err){ add('leon','⚠️ ' + err.message); }
-      finally { sendBtn.disabled = false; input.focus(); }
+      const q = input.value.trim();
+      if(!q) return;
+      add('you', q);
+      input.value = '';
+      sendBtn.disabled = true;
+      try {
+        const a = await askLeon(q);
+        add('leon', a);
+      } catch(err){
+        add('leon', '⚠️ ' + err.message);
+      } finally {
+        sendBtn.disabled = false;
+        input.focus();
+      }
     });
 
-    add('leon', 'Jag är här. Testa /api/health, sen skriv till mig.');
+    // Välkomstmeddelande
+    add('leon', 'Jag är här. Portalen är kopplad till Plåtleon. Testa länkarna ovan eller skriv ett meddelande!');
   </script>
 </body>
 </html>
