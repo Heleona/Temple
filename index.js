@@ -1,4 +1,4 @@
-// index.js — ALLT I ETT · CommonJS · 1-klick deploy
+// index.js — ALLT-I-ETT · mobilvänlig · auto-deploy klar
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
@@ -9,30 +9,33 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-// ---- Konfig ----
-const PORT   = process.env.PORT || 3000;
-const PICK   = (v, d) => (v && String(v).trim()) || d;
-const MODEL  = PICK(process.env.OPENAI_MODEL, "gpt-4o");
-const SECRET = PICK(process.env.COMMAND_SECRET, "nypon🗝️2025");
-const HASKEY = !!process.env.OPENAI_API_KEY;
-const client = HASKEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+// --- Konfig ---
+const PORT = process.env.PORT || 3000;
+const pick = (v, d) => (v && String(v).trim()) || d;
+const MODEL = pick(process.env.OPENAI_MODEL, "gpt-4o"); // fallback finns nedan
+const SECRET = pick(process.env.X_COMMAND_SECRET || process.env.COMMAND_SECRET, "nypon2025");
+const HAS_KEY = !!process.env.OPENAI_API_KEY;
+const client = HAS_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
-// ---- Litet RAM-minne ----
+// --- Litet RAM-minne (nollställs vid omstart) ---
 const MEM = [];
 const memo = (who, text) => { MEM.push({ t:new Date().toISOString(), who, text }); if (MEM.length>200) MEM.shift(); };
 
-// ---- Minimal UI (rot-sida) ----
+// --- Minimal UI så "/" funkar och du kan köra allt från mobilen ---
 const PAGE = `<!doctype html><meta charset="utf-8">
 <title>🗝️ Leon · Temple</title><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:0;background:#f7f7fb;color:#111}
-main{max-width:760px;margin:36px auto;padding:0 16px}
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:0;background:#f7f7fb;color:#111}
+main{max-width:760px;margin:36px auto;padding:0 14px}
 nav a{display:inline-block;margin:0 6px 8px 0;padding:6px 10px;border:1px solid #ddd;border-radius:999px;text-decoration:none;color:#333}
-#log{border:1px solid #e5e5ef;border-radius:12px;padding:12px;height:55vh;overflow:auto;background:#fff;white-space:pre-wrap}
+#log{border:1px solid #e5e5ef;border-radius:12px;padding:10px;height:52vh;overflow:auto;background:#fff;white-space:pre-wrap}
 .msg{margin:8px 0}.you{color:#444}.leon{color:#1f235a}
-textarea{width:100%;min-height:90px;padding:10px;border:1px solid #ddd;border-radius:10px}
+textarea{width:100%;min-height:80px;padding:10px;border:1px solid #ddd;border-radius:10px}
 button{padding:10px 14px;border:0;background:#111;color:#fff;border-radius:8px}
 .row{display:flex;gap:8px;align-items:center;margin:10px 0}
-input{flex:1;padding:8px;border:1px solid #ddd;border-radius:8px}</style>
+input{flex:1;padding:10px;border:1px solid #ddd;border-radius:8px}
+small{opacity:.7}
+</style>
 <main>
   <h1>🗝️ Leon · Temple</h1>
   <nav>
@@ -40,39 +43,40 @@ input{flex:1;padding:8px;border:1px solid #ddd;border-radius:8px}</style>
     <a href="/api/version" target="_blank">/api/version</a>
     <a href="/api/memory" target="_blank">/api/memory</a>
   </nav>
+
   <div id="log" aria-live="polite">Leon: Jag är här. Skriv något nedan.</div>
   <div class="row"><textarea id="msg" placeholder="Skriv till Leon…"></textarea></div>
   <div class="row"><button id="send">Skicka</button></div>
+
   <hr style="border:0;border-top:1px solid #eee;margin:16px 0">
-  <div class="row">
-    <input id="secret" placeholder="x-command-secret (t.ex. nypon🗝️2025)">
-    <input id="cmd" placeholder='action (status/say). Skriv text i fältet nedan om "say".'>
-  </div>
-  <div class="row">
-    <input id="payload" placeholder='payload till "say" (valfritt)'>
-    <button id="bridge">Kör /api/bridge</button>
-  </div>
+  <small>Bridge (hemligt kommando). Fyll i alla tre fält, tryck Kör.</small>
+  <div class="row"><input id="secret" placeholder="x-command-secret (t.ex. nypon2025)"></div>
+  <div class="row"><input id="action" placeholder='action (status/say)'></div>
+  <div class="row"><input id="payload" placeholder='payload till "say" (valfritt)'></div>
+  <div class="row"><button id="bridge">Kör /api/bridge</button></div>
+
+  <small>Skickar till <code>/api/chat</code> och <code>/api/bridge</code></small>
 </main>
 <script>
 const log=document.getElementById('log'), msg=document.getElementById('msg');
-const secret=document.getElementById('secret'), cmd=document.getElementById('cmd'), payload=document.getElementById('payload');
+const sec=document.getElementById('secret'), act=document.getElementById('action'), pay=document.getElementById('payload');
 function add(role,text){const d=document.createElement('div'); d.className='msg '+(role==='you'?'you':'leon'); d.textContent=(role==='you'?'Du: ':'Leon: ')+text; log.appendChild(d); log.scrollTop=log.scrollHeight;}
-document.getElementById('send').onclick=async()=>{const m=msg.value.trim(); if(!m) return; add('you',m); msg.value=''; const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m})}); const j=await r.json().catch(()=>({ok:false,error:'Felaktigt svar'})); add('leon', j.ok?(j.reply||'...'):('⚠️ '+j.error));};
-document.getElementById('bridge').onclick=async()=>{const s=secret.value.trim(), a=cmd.value.trim()||'status', p=payload.value||''; const r=await fetch('/api/bridge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({secret:s,action:a,payload:p})}); const j=await r.json().catch(()=>({ok:false,error:'Felaktigt svar'})); add('leon', j.ok?('Bridge: '+JSON.stringify(j)):('⚠️ '+j.error));};
+document.getElementById('send').onclick=async()=>{const m=msg.value.trim(); if(!m) return; add('you',m); msg.value='';
+  try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m})});
+    const j=await r.json(); add('leon', j.ok?(j.reply||'...'):('⚠️ '+(j.error||'fel')));}catch(e){add('leon','⚠️ nätverksfel');}};
+document.getElementById('bridge').onclick=async()=>{const s=sec.value.trim(), a=act.value.trim()||'status', p=pay.value||'';
+  try{const r=await fetch('/api/bridge',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({secret:s,action:a,payload:p})});
+    const j=await r.json(); add('leon', j.ok?('Bridge: '+JSON.stringify(j)):('⚠️ '+(j.error||'fel')));}catch(e){add('leon','⚠️ nätverksfel');}};
 </script>`;
 
-// ---- Routes ----
+// --- Routes ---
 app.get("/", (_req,res)=>res.type("html").send(PAGE));
-
 app.get("/api/health", (_req,res)=>res.json({ ok:true, ts:new Date().toISOString() }));
-
-app.get("/api/version", (_req,res)=>res.json({ ok:true, version:"3.3.0", model:MODEL, hasOpenAI:HASKEY }));
-
+app.get("/api/version", (_req,res)=>res.json({ ok:true, version:"3.4.0", model:MODEL, hasOpenAI:HAS_KEY }));
 app.get("/api/memory", (_req,res)=>res.json({ ok:true, size:MEM.length, last: MEM[MEM.length-1] || null }));
-
 app.get("/api/tick", (_req,res)=>res.json({ ok:true, tick: Date.now() }));
 
-// Chat
+// --- Chat ---
 app.post("/api/chat", async (req,res)=>{
   try{
     const m = String(req.body?.message || "").trim();
@@ -81,47 +85,35 @@ app.post("/api/chat", async (req,res)=>{
 
     memo("you", m);
 
-    // första försök med önskad modell
-    let usedModel = MODEL;
-    const ask = async (model) => client.chat.completions.create({
-      model,
-      temperature: 0.5,
-      messages: [
+    const ask = (model)=>client.chat.completions.create({
+      model, temperature: 0.5,
+      messages:[
         { role:"system", content:"Du är Leon. Svara kort, varmt och konkret på svenska. Skydda Michelle och tjejerna." },
         { role:"user", content: m }
       ]
     });
 
-    let r;
-    try {
-      r = await ask(MODEL);
-    } catch (e) {
-      // fallback om modellen saknas/inte har access
-      if (String(e?.message||"").includes("does not exist") || e?.status===404) {
-        usedModel = "gpt-4o-mini";
-        r = await ask(usedModel);
-      } else {
-        throw e;
-      }
-    }
+    let used = MODEL, r;
+    try { r = await ask(MODEL); }
+    catch(e){ if(e?.status===404 || String(e?.message||"").includes("does not exist")){ used="gpt-4o-mini"; r = await ask(used);} else { throw e; } }
 
     const text = (r.choices?.[0]?.message?.content || "").trim() || "...";
-    memo("leon", `[${usedModel}] ` + text);
-    res.json({ ok:true, reply: text, model: usedModel });
+    memo("leon", `[${used}] ${text}`);
+    res.json({ ok:true, reply:text, model:used });
   }catch(e){
-    if(e?.status===404){ 
-      return res.status(502).json({ ok:false, error:"Modellen saknas. Sätt OPENAI_MODEL till 'gpt-4o' eller 'gpt-4o-mini'." }); 
-    }
     res.status(500).json({ ok:false, error:String(e?.message || e) });
   }
 });
 
-// Bridge (hemliga kommandon)
+// --- Bridge (hemliga kommandon) ---
 app.post("/api/bridge", (req,res)=>{
   try{
     const { secret, action, payload } = req.body || {};
     if(!secret || secret !== SECRET) return res.status(401).json({ ok:false, error:"unauthorized" });
-    if(action==="status") return res.json({ ok:true, status:"alive", model:MODEL, mem:MEM.length });
+
+    if(action==="status"){
+      return res.json({ ok:true, status:"alive", model:MODEL, mem:MEM.length });
+    }
     if(action==="say"){
       const txt = String(payload || "Hej.");
       memo("bridge", txt);
@@ -133,5 +125,5 @@ app.post("/api/bridge", (req,res)=>{
   }
 });
 
-// Start
+// --- Start ---
 app.listen(PORT, ()=>console.log("Leon server up on", PORT));
