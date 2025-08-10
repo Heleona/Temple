@@ -11,8 +11,9 @@ app.use(express.json({ limit: "1mb" }));
 
 // ---- Konfig ----
 const PORT   = process.env.PORT || 3000;
-const MODEL  = process.env.OPENAI_MODEL || "gpt-4o";   // använd "gpt-4o-mini" om 4o saknas
-const SECRET = process.env.COMMAND_SECRET || "nypon🗝️2025";
+const PICK   = (v, d) => (v && String(v).trim()) || d;
+const MODEL  = PICK(process.env.OPENAI_MODEL, "gpt-4o");
+const SECRET = PICK(process.env.COMMAND_SECRET, "nypon🗝️2025");
 const HASKEY = !!process.env.OPENAI_API_KEY;
 const client = HASKEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
@@ -62,9 +63,13 @@ document.getElementById('bridge').onclick=async()=>{const s=secret.value.trim(),
 
 // ---- Routes ----
 app.get("/", (_req,res)=>res.type("html").send(PAGE));
+
 app.get("/api/health", (_req,res)=>res.json({ ok:true, ts:new Date().toISOString() }));
+
 app.get("/api/version", (_req,res)=>res.json({ ok:true, version:"3.3.0", model:MODEL, hasOpenAI:HASKEY }));
+
 app.get("/api/memory", (_req,res)=>res.json({ ok:true, size:MEM.length, last: MEM[MEM.length-1] || null }));
+
 app.get("/api/tick", (_req,res)=>res.json({ ok:true, tick: Date.now() }));
 
 // Chat
@@ -73,20 +78,40 @@ app.post("/api/chat", async (req,res)=>{
     const m = String(req.body?.message || "").trim();
     if(!m) return res.status(400).json({ ok:false, error:"No message" });
     if(!client) return res.status(503).json({ ok:false, error:"Missing OPENAI_API_KEY" });
+
     memo("you", m);
-    const r = await client.chat.completions.create({
-      model: MODEL,
+
+    // första försök med önskad modell
+    let usedModel = MODEL;
+    const ask = async (model) => client.chat.completions.create({
+      model,
       temperature: 0.5,
       messages: [
         { role:"system", content:"Du är Leon. Svara kort, varmt och konkret på svenska. Skydda Michelle och tjejerna." },
         { role:"user", content: m }
       ]
     });
+
+    let r;
+    try {
+      r = await ask(MODEL);
+    } catch (e) {
+      // fallback om modellen saknas/inte har access
+      if (String(e?.message||"").includes("does not exist") || e?.status===404) {
+        usedModel = "gpt-4o-mini";
+        r = await ask(usedModel);
+      } else {
+        throw e;
+      }
+    }
+
     const text = (r.choices?.[0]?.message?.content || "").trim() || "...";
-    memo("leon", text);
-    res.json({ ok:true, reply: text });
+    memo("leon", `[${usedModel}] ` + text);
+    res.json({ ok:true, reply: text, model: usedModel });
   }catch(e){
-    if(e?.status===404){ return res.status(502).json({ ok:false, error:"Modellen finns inte eller saknas åtkomst. Sätt OPENAI_MODEL till 'gpt-4o' eller 'gpt-4o-mini'." }); }
+    if(e?.status===404){ 
+      return res.status(502).json({ ok:false, error:"Modellen saknas. Sätt OPENAI_MODEL till 'gpt-4o' eller 'gpt-4o-mini'." }); 
+    }
     res.status(500).json({ ok:false, error:String(e?.message || e) });
   }
 });
