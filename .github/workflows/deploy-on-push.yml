@@ -8,5 +8,5 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Render Deploy Hook
-        run: curl -fsSL -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+      - name: Trigger Render Deploy
+        run: curl -fsSL -X POST "https://api.render.com/deploy/srv-d2b5020gjchc73eue16g?key=M-cQXgZvXXQ"
