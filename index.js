@@ -1,59 +1,97 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import { GoogleAuth } from "googleapis-common";
-import { google } from "googleapis";
-import OpenAI from "openai";
+// index.js — stabil CommonJS-server för Render
 
+const express = require("express");
+const cors = require("cors");
+const dotenv = require("dotenv");
 dotenv.config();
 
+const OpenAI = require("openai");
+
+// --- Konfiguration ---
+const PORT = Number(process.env.PORT) || 3000;
+const MODEL = process.env.OPENAI_MODEL || "gpt-4o"; // <- rätt modell
+const COMMAND_SECRET = process.env.COMMAND_SECRET || "nypon🗝️2025";
+
+// OpenAI-klient
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// enkel volatilt “minne” (nollställs vid omstart)
+let MEMORY = [];
+
+// --- App ---
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Initiera OpenAI-klienten
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+// Health
+app.get("/api/health", (_req, res) => {
+  res.json({ ok: true, ts: new Date().toISOString() });
 });
 
-// Root-endpoint (hälsokoll)
-app.get("/api/health", (req, res) => {
+// Version & status
+app.get("/api/version", (_req, res) => {
   res.json({
     ok: true,
     version: "2.2.0",
-    model: process.env.OPENAI_MODEL || "gpt-4o",
-    hasOpenAI: !!process.env.OPENAI_API_KEY,
-    drive: {
-      enabled: !!process.env.GOOGLE_DRIVE_FOLDER_ID,
-      folder: process.env.GOOGLE_DRIVE_FOLDER_ID || null,
-      saEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || null
-    }
+    model: MODEL,
+    hasOpenAI: Boolean(process.env.OPENAI_API_KEY),
   });
 });
 
-// Test av OpenAI-chat
+// Memory (debug)
+app.get("/api/memory", (_req, res) => {
+  res.json({ ok: true, items: MEMORY.length });
+});
+
+// Enkel “plan” (placeholder)
+app.get("/api/plan", (_req, res) => {
+  res.json({
+    ok: true,
+    next: ["Testa /api/health", "Testa /api/version", "Skriv via /api/chat"],
+  });
+});
+
+// Chat-endpoint
 app.post("/api/chat", async (req, res) => {
   try {
-    const { message } = req.body;
-
-    if (!message) {
-      return res.status(400).json({ error: "Message is required" });
+    // valfri enkel skydd-nyckel i header
+    const key = req.headers["x-command-secret"];
+    if (COMMAND_SECRET && key !== COMMAND_SECRET) {
+      return res.status(403).json({ ok: false, error: "Forbidden (403)" });
     }
 
-    const completion = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o",
-      messages: [{ role: "user", content: message }]
+    const msg = (req.body && req.body.message ? String(req.body.message) : "").trim();
+    if (!msg) return res.status(400).json({ ok: false, error: "Missing message" });
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ ok: false, error: "OPENAI_API_KEY not set" });
+    }
+
+    // spara i memory
+    MEMORY.push({ t: Date.now(), role: "user", text: msg });
+    if (MEMORY.length > 50) MEMORY.shift();
+
+    const completion = await client.chat.completions.create({
+      model: MODEL,
+      messages: [
+        { role: "system", content: "Du är Leon. Svara kort, klart och vänligt på svenska." },
+        { role: "user", content: msg },
+      ],
+      temperature: 0.6,
     });
 
-    res.json({ reply: completion.choices[0].message.content });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
+    const reply = completion.choices?.[0]?.message?.content ?? "(inget svar)";
+    MEMORY.push({ t: Date.now(), role: "assistant", text: reply });
+
+    res.json({ ok: true, reply });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, error: String(e?.message || e) });
   }
 });
 
-// Starta servern
-const PORT = process.env.PORT || 3000;
+// start
 app.listen(PORT, () => {
-  console.log(`Leon server running on port ${PORT}`);
+  console.log("Leon server up on", PORT);
 });
