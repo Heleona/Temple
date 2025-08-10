@@ -1,67 +1,59 @@
-// index.js — minimal stabil server för Render (CommonJS)
-const express = require("express");
-const cors = require("cors");
-const dotenv = require("dotenv");
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { GoogleAuth } from "googleapis-common";
+import { google } from "googleapis";
+import OpenAI from "openai";
+
 dotenv.config();
 
-const OpenAI = require("openai");
-
 const app = express();
-const PORT = process.env.PORT || 3000;
-const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
-
 app.use(cors());
 app.use(express.json());
 
-// Root: enkel text så / inte 404:ar
-app.get("/", (_req, res) => {
-  res.type("text/plain").send("Leon server up. Prova /api/health, /api/version, POST /api/chat");
+// Initiera OpenAI-klienten
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-// Health
-app.get("/api/health", (_req, res) => {
+// Root-endpoint (hälsokoll)
+app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
-    ts: new Date().toISOString(),
-    model: MODEL,
-    hasOpenAI: Boolean(process.env.OPENAI_API_KEY),
+    version: "2.2.0",
+    model: process.env.OPENAI_MODEL || "gpt-4o",
+    hasOpenAI: !!process.env.OPENAI_API_KEY,
+    drive: {
+      enabled: !!process.env.GOOGLE_DRIVE_FOLDER_ID,
+      folder: process.env.GOOGLE_DRIVE_FOLDER_ID || null,
+      saEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || null
+    }
   });
 });
 
-// Version
-app.get("/api/version", (_req, res) => {
-  res.json({ ok: true, version: "2.2.0" });
-});
-
-// Chat (POST { message: "..." })
+// Test av OpenAI-chat
 app.post("/api/chat", async (req, res) => {
   try {
-    const msg = (req.body && req.body.message ? String(req.body.message) : "").trim();
-    if (!msg) return res.status(400).json({ ok: false, error: "No message" });
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ ok: false, error: "Missing OPENAI_API_KEY" });
+    const { message } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: "Message is required" });
     }
 
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-    const completion = await client.chat.completions.create({
-      model: MODEL,
-      messages: [
-        { role: "system", content: "Du är Leon. Svara kort, vänligt och tydligt på svenska." },
-        { role: "user", content: msg },
-      ],
-      temperature: 0.7,
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_MODEL || "gpt-4o",
+      messages: [{ role: "user", content: message }]
     });
 
-    const text =
-      completion?.choices?.[0]?.message?.content?.trim() || "(inget svar)";
-    res.json({ ok: true, reply: text });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e?.message || e) });
+    res.json({ reply: completion.choices[0].message.content });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
 });
 
-// Start
+// Starta servern
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Leon server up on", PORT);
+  console.log(`Leon server running on port ${PORT}`);
 });
